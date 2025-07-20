@@ -7,10 +7,9 @@ class Command(BaseCommand):
     help = 'Ingest customer and loan data from Excel files'
 
     def handle(self, *args, **options):
-        import os
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-        customer_file = os.path.join(base_dir, 'data', 'customer_data.xlsx')
-        loan_file = os.path.join(base_dir, 'data', 'loan_data.xlsx')
+        # Use the correct path for data files in Docker container
+        customer_file = 'data/customer_data.xlsx'
+        loan_file = 'data/loan_data.xlsx'
 
         if os.path.exists(customer_file):
             self.stdout.write('Queuing customer data ingestion...')

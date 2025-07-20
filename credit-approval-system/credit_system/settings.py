@@ -58,8 +58,12 @@ WSGI_APPLICATION = 'credit_system.wsgi.application'
 # Database - Using SQLite for immediate testing
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'credit_system',
+        'USER': 'postgres',
+        'PASSWORD': 'postgres',
+        'HOST': 'db',  # This should match the service name in docker-compose.yml
+        'PORT': '5432',
     }
 }
 

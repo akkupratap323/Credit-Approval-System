@@ -6,6 +6,9 @@ from decimal import Decimal
 from datetime import datetime, timedelta
 from .models import Customer, Loan
 from .serializers import CustomerRegistrationSerializer, LoanEligibilitySerializer, LoanSerializer
+from django.core.files.storage import default_storage
+from .tasks import ingest_customer_data, ingest_loan_data
+import os
 
 def calculate_credit_score(customer):
     """Calculate credit score based on loan history"""
@@ -232,3 +235,69 @@ def view_loans(request, customer_id):
         })
     
     return Response(loan_data) 
+
+@api_view(['POST'])
+def ingest_data(request):
+    """
+    API endpoint to trigger data ingestion from Excel files
+    """
+    try:
+        # Handle file uploads
+        customer_file = request.FILES.get('customer_data')
+        loan_file = request.FILES.get('loan_data')
+        
+        if not customer_file or not loan_file:
+            return Response({
+                'error': 'Both customer_data and loan_data Excel files are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Save uploaded files
+        customer_path = default_storage.save(f'uploads/{customer_file.name}', customer_file)
+        loan_path = default_storage.save(f'uploads/{loan_file.name}', loan_file)
+        
+        # Trigger background tasks
+        customer_task = ingest_customer_data.delay(customer_path)
+        loan_task = ingest_loan_data.delay(loan_path)
+        
+        return Response({
+            'message': 'Data ingestion started',
+            'customer_task_id': customer_task.id,
+            'loan_task_id': loan_task.id,
+            'status_url': '/api/ingestion-status/'
+        }, status=status.HTTP_202_ACCEPTED)
+        
+    except Exception as e:
+        return Response({
+            'error': f'Failed to start data ingestion: {str(e)}'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET'])
+def ingestion_status(request):
+    """
+    Check the status of data ingestion tasks
+    """
+    customer_task_id = request.GET.get('customer_task_id')
+    loan_task_id = request.GET.get('loan_task_id')
+    
+    if not customer_task_id or not loan_task_id:
+        return Response({
+            'error': 'Both customer_task_id and loan_task_id are required'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    
+    from celery.result import AsyncResult
+    
+    customer_result = AsyncResult(customer_task_id)
+    loan_result = AsyncResult(loan_task_id)
+    
+    return Response({
+        'customer_task': {
+            'id': customer_task_id,
+            'status': customer_result.status,
+            'result': customer_result.result if customer_result.ready() else None
+        },
+        'loan_task': {
+            'id': loan_task_id,
+            'status': loan_result.status,
+            'result': loan_result.result if loan_result.ready() else None
+        }
+    }) 
